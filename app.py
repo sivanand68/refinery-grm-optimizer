@@ -4,7 +4,7 @@ from google import genai
 
 st.set_page_config(page_title="Refinery AI GRM Optimizer", page_icon="🛢️", layout="wide")
 st.title("🛢️ Indian Refinery Crude Assay & AI GRM Optimizer")
-st.write("Select a crude slate and market prices to calculate GRM and get operational/corrosion insights.")
+st.write("Select a crude slate and market prices to calculate GRM, Net Margin, and operational insights.")
 
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
@@ -49,6 +49,7 @@ with col1:
     crude_name = st.selectbox("Select Crude Grade", list(crude_grades.keys()))
     default_cost = crude_grades[crude_name]["crude_cost_usd"]
     crude_price_usd = st.number_input("Landed Crude Cost ($ / bbl)", value=float(default_cost), step=0.5)
+    opex_usd = st.number_input("Refinery OpEx ($ / bbl)", value=3.0, step=0.25)  # 👈 NEW: OpEx input box
     usd_to_inr = st.number_input("Exchange Rate (₹ per $)", value=94.5, step=0.1)
     diesel_price = st.number_input("Diesel Gate Price (₹ / Litre)", value=70.5, step=0.5)
     petrol_price = st.number_input("Petrol Gate Price (₹ / Litre)", value=70.0, step=0.5)
@@ -76,15 +77,20 @@ with col2:
         grm_inr = total_revenue_inr - crude_cost_inr
         grm_usd = grm_inr / usd_to_inr
 
-        st.subheader(f"Gross Refining Margin: ₹{grm_inr:,.2f} / bbl (${grm_usd:.2f} / bbl)")
+        # 👈 NEW: Calculate Net Refining Margin after deducting OpEx
+        net_margin_usd = grm_usd - opex_usd
+        net_margin_inr = net_margin_usd * usd_to_inr
+
+        st.subheader(f"Gross Refining Margin (GRM): ₹{grm_inr:,.2f} / bbl (${grm_usd:.2f} / bbl)")
+        st.success(f"**Net Refining Margin (after ${opex_usd:.2f}/bbl OpEx): ₹{net_margin_inr:,.2f} / bbl (${net_margin_usd:.2f} / bbl)**")
         st.markdown("\n".join(breakdown))
 
         prompt = f"""
         You are a senior Indian refinery LP & crude economist.
-        Crude: {crude_name} | Cost: ${crude_price_usd}/bbl | FX: ₹{usd_to_inr}/$
-        Calculated GRM: ₹{grm_inr:,.2f}/bbl (${grm_usd:.2f}/bbl).
+        Crude: {crude_name} | Cost: ${crude_price_usd}/bbl | OpEx: ${opex_usd}/bbl | FX: ₹{usd_to_inr}/$
+        Calculated GRM: ${grm_usd:.2f}/bbl | Net Refining Margin: ${net_margin_usd:.2f}/bbl.
         In 3 short bullet points, comment on:
-        1. Whether this GRM covers typical Indian complex refinery OpEx (~$2.50-$3.50/bbl) to yield a healthy Net Margin.
+        1. Commercial attractiveness of this Net Margin (${net_margin_usd:.2f}/bbl) for an Indian complex refinery.
         2. Key operational/metallurgical watchouts (e.g., sulfur/TAN corrosion in CDU/VDU or hydrotreating load) for {crude_name}.
         """
 
@@ -96,3 +102,7 @@ with col2:
                     break
                 except Exception as e:
                     time.sleep(2)
+
+# 👈 NEW: Engineering disclaimer note at the bottom of the app
+st.divider()
+st.caption("⚠️ **Disclaimer:** Simulated product yields, Trade/Import Parity gate prices, and OpEx figures are approximate benchmarks intended for educational purposes and preliminary estimation only.")
